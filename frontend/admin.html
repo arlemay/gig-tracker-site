@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Bali Gigs — Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script>
+    // Point at reverse proxy
+    const API = (p) => `/api${p}`;
+    // Put your API key here for now (or prompt)
+    const ADMIN_TOKEN = localStorage.getItem('ADMIN_TOKEN') || '';
+    document.addEventListener('htmx:configRequest', (ev) => {
+      if (ADMIN_TOKEN) ev.detail.headers['X-API-Key'] = ADMIN_TOKEN;
+      ev.detail.headers['Content-Type'] = 'application/json';
+    });
+    function setToken() {
+      const t = prompt("Enter admin token:");
+      if (t !== null) {
+        localStorage.setItem('ADMIN_TOKEN', t);
+        location.reload();
+      }
+    }
+    async function loadAll() {
+      const [bands, venues, events] = await Promise.all([
+        fetch(API('/bands')).then(r=>r.json()),
+        fetch(API('/venues')).then(r=>r.json()),
+        fetch(API('/events')).then(r=>r.json()),
+      ]);
+      renderBands(bands);
+      renderVenues(venues);
+      renderEvents(events, bands, venues);
+    }
+    function renderBands(bands){
+      const rows = bands.map(b=>`
+        <tr class="border-b">
+          <td class="p-2">${b.id}</td>
+          <td class="p-2">${b.name}</td>
+          <td class="p-2">${b.genre||''}</td>
+          <td class="p-2">${b.city||''}</td>
+          <td class="p-2">
+            <button class="text-blue-600 underline" onclick='editBand(${JSON.stringify(b)})'>Edit</button>
+            <button class="text-red-600 underline" onclick='delBand(${b.id})'>Delete</button>
+          </td>
+        </tr>
+      `).join('');
+      document.getElementById('bands-body').innerHTML = rows || `<tr><td class="p-2" colspan="5">No bands</td></tr>`;
+    }
+    function renderVenues(venues){
+      const rows = venues.map(v=>`
+        <tr class="border-b">
+          <td class="p-2">${v.id}</td>
+          <td class="p-2">${v.name}</td>
+          <td class="p-2">${v.address||''}</td>
+          <td class="p-2">${v.lat.toFixed(4)}, ${v.lon.toFixed(4)}</td>
+          <td class="p-2">
+            <button class="text-blue-600 underline" onclick='editVenue(${JSON.stringify(v)})'>Edit</button>
+            <button class="text-red-600 underline" onclick='delVenue(${v.id})'>Delete</button>
+          </td>
+        </tr>
+      `).join('');
+      document.getElementById('venues-body').innerHTML = rows || `<tr><td class="p-2" colspan="5">No venues</td></tr>`;
+    }
+    function renderEvents(events, bands, venues){
+      const rows = events.map(e=>{
+        const bandNames = (e.bands||[]).map(b=>b.name).join(', ');
+        return `
+        <tr class="border-b">
+          <td class="p-2">${e.id}</td>
+          <td class="p-2">${e.title}</td>
+          <td class="p-2">${new Date(e.starts_at).toLocaleString()}</td>
+          <td class="p-2">${e.venue?.name||''}</td>
+          <td class="p-2">${bandNames}</td>
+          <td class="p-2">
+            <button class="text-blue-600 underline" onclick='editEvent(${JSON.stringify(e)})'>Edit</button>
+            <button class="text-red-600 underline" onclick='delEvent(${e.id})'>Delete</button>
+          </td>
+        </tr>`;
+      }).join('');
+      document.getElementById('events-body').innerHTML = rows || `<tr><td class="p-2" colspan="6">No events</td></tr>`;
+      // populate selects for forms
+      const bandOpts = bands.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+      const venueOpts = venues.map(v=>`<option value="${v.id}">${v.name}</option>`).join('');
+      document.getElementById('event-bands').innerHTML = bandOpts;
+      document.getElementById('event-venue').innerHTML = venueOpts;
+    }
+    // --- Actions ---
+    async function createBand(){
+      const body = {
+        name: document.getElementById('b-name').value,
+        genre: document.getElementById('b-genre').value,
+        city: document.getElementById('b-city').value,
+        instagram: document.getElementById('b-ig').value || null,
+        youtube: document.getElementById('b-yt').value || null,
+        description: document.getElementById('b-desc').value || null,
+      };
+      const r = await fetch(API('/bands'), {method:'POST', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      if(!r.ok){ alert('Failed to create band'); return;}
+      loadAll();
+    }
+    async function delBand(id){
+      if(!confirm('Delete band?')) return;
+      await fetch(API(`/bands/${id}`), {method:'DELETE', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||''}});
+      loadAll();
+    }
+    function editBand(b){
+      document.getElementById('b2-id').value = b.id;
+      document.getElementById('b2-name').value = b.name;
+      document.getElementById('b2-genre').value = b.genre||'';
+      document.getElementById('b2-city').value = b.city||'';
+      document.getElementById('b2-ig').value = b.instagram||'';
+      document.getElementById('b2-yt').value = b.youtube||'';
+      document.getElementById('b2-desc').value = b.description||'';
+    }
+    async function saveBand(){
+      const id = document.getElementById('b2-id').value;
+      const body = {
+        name: document.getElementById('b2-name').value,
+        genre: document.getElementById('b2-genre').value,
+        city: document.getElementById('b2-city').value,
+        instagram: document.getElementById('b2-ig').value || null,
+        youtube: document.getElementById('b2-yt').value || null,
+        description: document.getElementById('b2-desc').value || null,
+      };
+      await fetch(API(`/bands/${id}`), {method:'PUT', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      loadAll();
+    }
+    async function createVenue(){
+      const body = {
+        name: document.getElementById('v-name').value,
+        address: document.getElementById('v-address').value,
+        district: document.getElementById('v-district').value || null,
+        lat: parseFloat(document.getElementById('v-lat').value),
+        lon: parseFloat(document.getElementById('v-lon').value),
+        instagram: document.getElementById('v-ig').value || null,
+        website: document.getElementById('v-web').value || null,
+        notes: document.getElementById('v-notes').value || null,
+      };
+      const r = await fetch(API('/venues'), {method:'POST', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      if(!r.ok){ alert('Failed to create venue'); return;}
+      loadAll();
+    }
+    async function delVenue(id){
+      if(!confirm('Delete venue?')) return;
+      await fetch(API(`/venues/${id}`), {method:'DELETE', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||''}});
+      loadAll();
+    }
+    function editVenue(v){
+      document.getElementById('v2-id').value = v.id;
+      document.getElementById('v2-name').value = v.name;
+      document.getElementById('v2-address').value = v.address||'';
+      document.getElementById('v2-district').value = v.district||'';
+      document.getElementById('v2-lat').value = v.lat;
+      document.getElementById('v2-lon').value = v.lon;
+      document.getElementById('v2-ig').value = v.instagram||'';
+      document.getElementById('v2-web').value = v.website||'';
+      document.getElementById('v2-notes').value = v.notes||'';
+    }
+    async function saveVenue(){
+      const id = document.getElementById('v2-id').value;
+      const body = {
+        name: document.getElementById('v2-name').value,
+        address: document.getElementById('v2-address').value,
+        district: document.getElementById('v2-district').value || null,
+        lat: parseFloat(document.getElementById('v2-lat').value),
+        lon: parseFloat(document.getElementById('v2-lon').value),
+        instagram: document.getElementById('v2-ig').value || null,
+        website: document.getElementById('v2-web').value || null,
+        notes: document.getElementById('v2-notes').value || null,
+      };
+      await fetch(API(`/venues/${id}`), {method:'PUT', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      loadAll();
+    }
+    async function createEvent(){
+      const starts = document.getElementById('e-starts').value;
+      const ends = document.getElementById('e-ends').value || null;
+      const bandsSel = document.getElementById('event-bands');
+      const band_ids = Array.from(bandsSel.selectedOptions).map(o=>parseInt(o.value));
+      const body = {
+        title: document.getElementById('e-title').value,
+        starts_at: starts,
+        ends_at: ends,
+        price: document.getElementById('e-price').value || null,
+        poster_url: document.getElementById('e-poster').value || null,
+        url: document.getElementById('e-url').value || null,
+        venue_id: parseInt(document.getElementById('event-venue').value),
+        band_ids
+      };
+      const r = await fetch(API('/events'), {method:'POST', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      if(!r.ok){ alert('Failed to create event'); return; }
+      loadAll();
+    }
+    async function delEvent(id){
+      if(!confirm('Delete event?')) return;
+      await fetch(API(`/events/${id}`), {method:'DELETE', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||''}});
+      loadAll();
+    }
+    function editEvent(e){
+      // simple suggestion: for now, delete + recreate in UI if big edits; or extend with edit form like bands/venues
+      alert('Quick tip: use Delete then re-create for events for now, or we can add a full edit form next.');
+    }
+    window.addEventListener('DOMContentLoaded', loadAll);
+  </script>
+</head>
+<body class="max-w-6xl mx-auto p-4 space-y-6">
+  <header class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold">Bali Gigs — Admin</h1>
+    <button class="px-3 py-1 rounded border" onclick="setToken()">Set Admin Token</button>
+  </header>
+
+  <!-- Bands -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">Bands</h2>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div class="border rounded-lg p-3">
+        <h3 class="font-medium mb-2">Create</h3>
+        <div class="grid gap-2">
+          <input id="b-name" class="border p-2 rounded" placeholder="Name">
+          <input id="b-genre" class="border p-2 rounded" placeholder="Genre">
+          <input id="b-city" class="border p-2 rounded" placeholder="City">
+          <input id="b-ig" class="border p-2 rounded" placeholder="Instagram">
+          <input id="b-yt" class="border p-2 rounded" placeholder="YouTube URL">
+          <textarea id="b-desc" class="border p-2 rounded" placeholder="Description"></textarea>
+          <button class="px-3 py-2 rounded bg-slate-900 text-white" onclick="createBand()">Add Band</button>
+        </div>
+      </div>
+      <div class="border rounded-lg p-3">
+        <h3 class="font-medium mb-2">Edit</h3>
+        <div class="grid gap-2">
+          <input id="b2-id" class="border p-2 rounded" placeholder="ID" readonly>
+          <input id="b2-name" class="border p-2 rounded" placeholder="Name">
+          <input id="b2-genre" class="border p-2 rounded" placeholder="Genre">
+          <input id="b2-city" class="border p-2 rounded" placeholder="City">
+          <input id="b2-ig" class="border p-2 rounded" placeholder="Instagram">
+          <input id="b2-yt" class="border p-2 rounded" placeholder="YouTube URL">
+          <textarea id="b2-desc" class="border p-2 rounded" placeholder="Description"></textarea>
+          <button class="px-3 py-2 rounded bg-slate-900 text-white" onclick="saveBand()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+    <table class="w-full text-sm border">
+      <thead><tr class="bg-slate-100">
+        <th class="p-2 text-left">ID</th><th class="p-2 text-left">Name</th><th class="p-2 text-left">Genre</th><th class="p-2 text-left">City</th><th class="p-2 text-left">Actions</th>
+      </tr></thead>
+      <tbody id="bands-body"></tbody>
+    </table>
+  </section>
+
+  <!-- Venues -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">Venues</h2>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div class="border rounded-lg p-3">
+        <h3 class="font-medium mb-2">Create</h3>
+        <div class="grid gap-2">
+          <input id="v-name" class="border p-2 rounded" placeholder="Name">
+          <input id="v-address" class="border p-2 rounded" placeholder="Address">
+          <input id="v-district" class="border p-2 rounded" placeholder="District">
+          <input id="v-lat" class="border p-2 rounded" placeholder="Lat (-8.6)">
+          <input id="v-lon" class="border p-2 rounded" placeholder="Lon (115.2)">
+          <input id="v-ig" class="border p-2 rounded" placeholder="Instagram">
+          <input id="v-web" class="border p-2 rounded" placeholder="Website URL">
+          <textarea id="v-notes" class="border p-2 rounded" placeholder="Notes"></textarea>
+          <button class="px-3 py-2 rounded bg-slate-900 text-white" onclick="createVenue()">Add Venue</button>
+        </div>
+      </div>
+      <div class="border rounded-lg p-3">
+        <h3 class="font-medium mb-2">Edit</h3>
+        <div class="grid gap-2">
+          <input id="v2-id" class="border p-2 rounded" placeholder="ID" readonly>
+          <input id="v2-name" class="border p-2 rounded" placeholder="Name">
+          <input id="v2-address" class="border p-2 rounded" placeholder="Address">
+          <input id="v2-district" class="border p-2 rounded" placeholder="District">
+          <input id="v2-lat" class="border p-2 rounded" placeholder="Lat">
+          <input id="v2-lon" class="border p-2 rounded" placeholder="Lon">
+          <input id="v2-ig" class="border p-2 rounded" placeholder="Instagram">
+          <input id="v2-web" class="border p-2 rounded" placeholder="Website URL">
+          <textarea id="v2-notes" class="border p-2 rounded" placeholder="Notes"></textarea>
+          <button class="px-3 py-2 rounded bg-slate-900 text-white" onclick="saveVenue()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+    <table class="w-full text-sm border">
+      <thead><tr class="bg-slate-100">
+        <th class="p-2 text-left">ID</th><th class="p-2 text-left">Name</th><th class="p-2 text-left">Address</th><th class="p-2 text-left">Lat/Lon</th><th class="p-2 text-left">Actions</th>
+      </tr></thead>
+      <tbody id="venues-body"></tbody>
+    </table>
+  </section>
+
+  <!-- Events -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">Events</h2>
+    <div class="border rounded-lg p-3">
+      <h3 class="font-medium mb-2">Create</h3>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <input id="e-title" class="border p-2 rounded" placeholder="Title">
+        <input id="e-price" class="border p-2 rounded" placeholder="Price">
+        <input id="e-url" class="border p-2 rounded" placeholder="URL">
+        <input id="e-poster" class="border p-2 rounded" placeholder="Poster URL">
+        <input id="e-starts" type="datetime-local" class="border p-2 rounded">
+        <input id="e-ends" type="datetime-local" class="border p-2 rounded">
+        <select id="event-venue" class="border p-2 rounded"></select>
+        <select id="event-bands" class="border p-2 rounded" multiple size="6"></select>
+      </div>
+      <button class="mt-2 px-3 py-2 rounded bg-slate-900 text-white" onclick="createEvent()">Add Event</button>
+    </div>
+    <table class="w-full text-sm border">
+      <thead><tr class="bg-slate-100">
+        <th class="p-2 text-left">ID</th><th class="p-2 text-left">Title</th><th class="p-2 text-left">Starts</th><th class="p-2 text-left">Venue</th><th class="p-2 text-left">Bands</th><th class="p-2 text-left">Actions</th>
+      </tr></thead>
+      <tbody id="events-body"></tbody>
+    </table>
+  </section>
+</body>
+</html>

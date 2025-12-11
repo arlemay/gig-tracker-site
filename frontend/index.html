@@ -204,6 +204,9 @@
       return await r.json();
     }
 
+    const includePast = !$('#upcomingOnly').checked;
+    const eventsPath = includePast ? '/events?include_past=true' : '/events';
+
     async function boot() {
       [allBands, allVenues, allEvents] = await Promise.all([
         fetchJSON('/bands'),
@@ -214,7 +217,7 @@
     }
 
     $('#search').addEventListener('input', render);
-    $('#upcomingOnly').addEventListener('change', render);
+    $('#upcomingOnly').addEventListener('change', boot);
 
     setPage('events');
     boot().catch(err => {

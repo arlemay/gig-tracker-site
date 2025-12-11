@@ -26,7 +26,8 @@
       const [bands, venues, events] = await Promise.all([
         fetch(API('/bands')).then(r=>r.json()),
         fetch(API('/venues')).then(r=>r.json()),
-        fetch(API('/events')).then(r=>r.json()),
+        fetch(API('/events?include_past=true')).then(r=>r.json()),  // 👈 include past shows
+
       ]);
       renderBands(bands);
       renderVenues(venues);

@@ -173,7 +173,7 @@
       await fetch(API(`/venues/${id}`), {method:'PUT', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
       loadAll();
     }
-    async function createEvent(){
+    async function submitEvent(){
       const starts = document.getElementById('e-starts').value;
       const ends = document.getElementById('e-ends').value || null;
       const bandsSel = document.getElementById('event-bands');
@@ -305,7 +305,7 @@
         <select id="event-venue" class="border p-2 rounded"></select>
         <select id="event-bands" class="border p-2 rounded" multiple size="6"></select>
       </div>
-      <button class="mt-2 px-3 py-2 rounded bg-slate-900 text-white" onclick="createEvent()">Add Event</button>
+      <button class="mt-2 px-3 py-2 rounded bg-slate-900 text-white" onclick="submitEvent()">Add Event</button>
     </div>
     <table class="w-full text-sm border">
       <thead><tr class="bg-slate-100">

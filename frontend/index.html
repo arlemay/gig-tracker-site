@@ -168,13 +168,20 @@
     }
 
     // --- Map ---
+    
+const thunderforestApiKey = '10f8de20b03549d4860ccc8fc5c36fd2';
+
     function initMap() {
       mapReady = true;
       map = L.map('map').setView([-8.4095, 115.1889], 10);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+   //   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    //    maxZoom: 19,
+   //     attribution: '&copy; OpenStreetMap contributors'
+   //   }).addTo(map);
+L.tileLayer('https://tile.thunderforest.com/spinal-map/{z}/{x}/{y}.png?apikey=' + thunderforestApiKey, {
+    attribution: '&copy; <a href="http://www.thunderforest.com/">Thunderforest</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 22
+}).addTo(map);	    
       markersLayer = L.layerGroup().addTo(map);
       addMarkers(allVenues);
     }

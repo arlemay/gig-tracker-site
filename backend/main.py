@@ -77,7 +77,7 @@ def create_band(payload: BandCreate, db: Session = Depends(get_db)):
 
 @app.put("/bands/{band_id}", response_model=BandOut, dependencies=[Depends(require_admin)])
 def update_band(band_id: int, payload: BandUpdate, db: Session = Depends(get_db)):
-    b = db.query(Band).get(band_id)
+    b = db.get(Band, band_id)
     if not b:
         raise HTTPException(status_code=404, detail="Band not found")
     data = payload.model_dump(exclude_unset=True)
@@ -90,7 +90,7 @@ def update_band(band_id: int, payload: BandUpdate, db: Session = Depends(get_db)
 
 @app.delete("/bands/{band_id}", status_code=204, dependencies=[Depends(require_admin)])
 def delete_band(band_id: int, db: Session = Depends(get_db)):
-    b = db.query(Band).get(band_id)
+    b = db.get(Band, band_id)
     if not b:
         raise HTTPException(status_code=404, detail="Band not found")
     db.delete(b)
@@ -134,7 +134,7 @@ def create_venue(payload: VenueCreate, db: Session = Depends(get_db)):
 
 @app.put("/venues/{venue_id}", response_model=VenueOut, dependencies=[Depends(require_admin)])
 def update_venue(venue_id: int, payload: VenueUpdate, db: Session = Depends(get_db)):
-    v = db.query(Venue).get(venue_id)
+    v = db.get(Venue, venue_id)
     if not v:
         raise HTTPException(status_code=404, detail="Venue not found")
     data = payload.model_dump(exclude_unset=True)
@@ -147,7 +147,7 @@ def update_venue(venue_id: int, payload: VenueUpdate, db: Session = Depends(get_
 
 @app.delete("/venues/{venue_id}", status_code=204, dependencies=[Depends(require_admin)])
 def delete_venue(venue_id: int, db: Session = Depends(get_db)):
-    v = db.query(Venue).get(venue_id)
+    v = db.get(Venue, venue_id)
     if not v:
         raise HTTPException(status_code=404, detail="Venue not found")
     db.delete(v)
@@ -199,7 +199,7 @@ def list_events(include_past: bool = False, db: Session = Depends(get_db)):
 
 @app.post("/events", response_model=EventOut, dependencies=[Depends(require_admin)])
 def create_event(payload: EventCreate, db: Session = Depends(get_db)):
-    venue = db.query(Venue).get(payload.venue_id)
+    venue = db.get(Venue, payload.venue_id)
     if not venue:
         raise HTTPException(status_code=400, detail="Invalid venue_id")
 
@@ -217,18 +217,18 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
     _apply_event_bands(ev, payload.band_ids, db)
     db.commit()
     db.refresh(ev)
-    return db.query(Event).options(joinedload(Event.venue), joinedload(Event.bands)).get(ev.id)
+    return db.query(Event).options(joinedload(Event.venue), joinedload(Event.bands)).filter(Event.id == ev.id).one()
 
 
 @app.put("/events/{event_id}", response_model=EventOut, dependencies=[Depends(require_admin)])
 def update_event(event_id: int, payload: EventUpdate, db: Session = Depends(get_db)):
-    ev = db.query(Event).get(event_id)
+    ev = db.get(Event, event_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
 
     data = payload.model_dump(exclude_unset=True)
     if "venue_id" in data:
-        venue = db.query(Venue).get(data["venue_id"])
+        venue = db.get(Venue, data["venue_id"])
         if not venue:
             raise HTTPException(status_code=400, detail="Invalid venue_id")
 
@@ -240,12 +240,12 @@ def update_event(event_id: int, payload: EventUpdate, db: Session = Depends(get_
 
     db.commit()
     db.refresh(ev)
-    return db.query(Event).options(joinedload(Event.venue), joinedload(Event.bands)).get(event_id)
+    return db.query(Event).options(joinedload(Event.venue), joinedload(Event.bands)).filter(Event.id == event_id).one()
 
 
 @app.delete("/events/{event_id}", status_code=204, dependencies=[Depends(require_admin)])
 def delete_event(event_id: int, db: Session = Depends(get_db)):
-    ev = db.query(Event).get(event_id)
+    ev = db.get(Event, event_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
     ev.bands = []  # detach many-to-many

@@ -5,132 +5,174 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Bali Gigs — Admin</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script>
-    // Point at reverse proxy
     const API = (p) => `/api${p}`;
-    // Put your API key here for now (or prompt)
-    const ADMIN_TOKEN = localStorage.getItem('ADMIN_TOKEN') || '';
-    document.addEventListener('htmx:configRequest', (ev) => {
-      if (ADMIN_TOKEN) ev.detail.headers['X-API-Key'] = ADMIN_TOKEN;
-      ev.detail.headers['Content-Type'] = 'application/json';
-    });
+
+    // --- Auth ---
+    function getToken() { return sessionStorage.getItem('ADMIN_TOKEN') || ''; }
+    function authHeaders() {
+      return { 'X-API-Key': getToken(), 'Content-Type': 'application/json' };
+    }
     function setToken() {
       const t = prompt("Enter admin token:");
       if (t !== null) {
-        localStorage.setItem('ADMIN_TOKEN', t);
+        sessionStorage.setItem('ADMIN_TOKEN', t);
         location.reload();
       }
     }
+
+    // --- In-memory stores (keyed by id) ---
+    const store = { bands: {}, venues: {}, events: {} };
+
+    // --- Toast ---
+    function toast(msg, ok = true) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = `fixed top-4 right-4 px-4 py-2 rounded shadow text-white text-sm z-50 ${ok ? 'bg-green-600' : 'bg-red-600'}`;
+      el.classList.remove('hidden');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.add('hidden'), 3000);
+    }
+
+    // --- Escape helper (prevents XSS in rendered HTML) ---
+    function esc(str) {
+      const d = document.createElement('div');
+      d.appendChild(document.createTextNode(str ?? ''));
+      return d.innerHTML;
+    }
+
     async function loadAll() {
       const [bands, venues, events] = await Promise.all([
-        fetch(API('/bands')).then(r=>r.json()),
-        fetch(API('/venues')).then(r=>r.json()),
-        fetch(API('/events?include_past=true')).then(r=>r.json()),  // 👈 include past shows
-
+        fetch(API('/bands')).then(r => r.json()),
+        fetch(API('/venues')).then(r => r.json()),
+        fetch(API('/events?include_past=true')).then(r => r.json()),
       ]);
+      store.bands = Object.fromEntries(bands.map(b => [b.id, b]));
+      store.venues = Object.fromEntries(venues.map(v => [v.id, v]));
+      store.events = Object.fromEntries(events.map(e => [e.id, e]));
       renderBands(bands);
       renderVenues(venues);
       renderEvents(events, bands, venues);
     }
-    function renderBands(bands){
-      const rows = bands.map(b=>`
+
+    // --- Render ---
+    function renderBands(bands) {
+      const rows = bands.map(b => `
         <tr class="border-b">
           <td class="p-2">${b.id}</td>
-          <td class="p-2">${b.name}</td>
-          <td class="p-2">${b.genre||''}</td>
-          <td class="p-2">${b.city||''}</td>
-          <td class="p-2">
-            <button class="text-blue-600 underline" onclick='editBand(${JSON.stringify(b)})'>Edit</button>
-            <button class="text-red-600 underline" onclick='delBand(${b.id})'>Delete</button>
+          <td class="p-2">${esc(b.name)}</td>
+          <td class="p-2">${esc(b.genre || '')}</td>
+          <td class="p-2">${esc(b.city || '')}</td>
+          <td class="p-2 space-x-2">
+            <button class="text-blue-600 underline" onclick="editBand(${b.id})">Edit</button>
+            <button class="text-red-600 underline" onclick="delBand(${b.id})">Delete</button>
           </td>
         </tr>
       `).join('');
       document.getElementById('bands-body').innerHTML = rows || `<tr><td class="p-2" colspan="5">No bands</td></tr>`;
     }
-    function renderVenues(venues){
-      const rows = venues.map(v=>`
+
+    function renderVenues(venues) {
+      const rows = venues.map(v => `
         <tr class="border-b">
           <td class="p-2">${v.id}</td>
-          <td class="p-2">${v.name}</td>
-          <td class="p-2">${v.address||''}</td>
+          <td class="p-2">${esc(v.name)}</td>
+          <td class="p-2">${esc(v.address || '')}</td>
           <td class="p-2">${v.lat.toFixed(4)}, ${v.lon.toFixed(4)}</td>
-          <td class="p-2">
-            <button class="text-blue-600 underline" onclick='editVenue(${JSON.stringify(v)})'>Edit</button>
-            <button class="text-red-600 underline" onclick='delVenue(${v.id})'>Delete</button>
+          <td class="p-2 space-x-2">
+            <button class="text-blue-600 underline" onclick="editVenue(${v.id})">Edit</button>
+            <button class="text-red-600 underline" onclick="delVenue(${v.id})">Delete</button>
           </td>
         </tr>
       `).join('');
       document.getElementById('venues-body').innerHTML = rows || `<tr><td class="p-2" colspan="5">No venues</td></tr>`;
     }
-    function renderEvents(events, bands, venues){
-      const rows = events.map(e=>{
-        const bandNames = (e.bands||[]).map(b=>b.name).join(', ');
+
+    function renderEvents(events, bands, venues) {
+      const rows = events.map(e => {
+        const bandNames = (e.bands || []).map(b => esc(b.name)).join(', ');
         return `
-        <tr class="border-b">
-          <td class="p-2">${e.id}</td>
-          <td class="p-2">${e.title}</td>
-          <td class="p-2">${new Date(e.starts_at).toLocaleString()}</td>
-          <td class="p-2">${e.venue?.name||''}</td>
-          <td class="p-2">${bandNames}</td>
-          <td class="p-2">
-            <button class="text-blue-600 underline" onclick='editEvent(${JSON.stringify(e)})'>Edit</button>
-            <button class="text-red-600 underline" onclick='delEvent(${e.id})'>Delete</button>
-          </td>
-        </tr>`;
+          <tr class="border-b">
+            <td class="p-2">${e.id}</td>
+            <td class="p-2">${esc(e.title)}</td>
+            <td class="p-2">${new Date(e.starts_at).toLocaleString()}</td>
+            <td class="p-2">${esc(e.venue?.name || '')}</td>
+            <td class="p-2">${bandNames}</td>
+            <td class="p-2 space-x-2">
+              <button class="text-blue-600 underline" onclick="editEvent(${e.id})">Edit</button>
+              <button class="text-red-600 underline" onclick="delEvent(${e.id})">Delete</button>
+            </td>
+          </tr>`;
       }).join('');
       document.getElementById('events-body').innerHTML = rows || `<tr><td class="p-2" colspan="6">No events</td></tr>`;
-      // populate selects for forms
-      const bandOpts = bands.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
-      const venueOpts = venues.map(v=>`<option value="${v.id}">${v.name}</option>`).join('');
+
+      const bandOpts = bands.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+      const venueOpts = venues.map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join('');
       document.getElementById('event-bands').innerHTML = bandOpts;
       document.getElementById('event-venue').innerHTML = venueOpts;
+      document.getElementById('e2-bands').innerHTML = bandOpts;
+      document.getElementById('e2-venue').innerHTML = venueOpts;
     }
-    // --- Actions ---
-    async function createBand(){
+
+    // --- Bands ---
+    async function createBand() {
       const body = {
         name: document.getElementById('b-name').value,
-        genre: document.getElementById('b-genre').value,
-        city: document.getElementById('b-city').value,
+        genre: document.getElementById('b-genre').value || null,
+        city: document.getElementById('b-city').value || null,
         instagram: document.getElementById('b-ig').value || null,
         youtube: document.getElementById('b-yt').value || null,
         description: document.getElementById('b-desc').value || null,
       };
-      const r = await fetch(API('/bands'), {method:'POST', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
-      if(!r.ok){ alert('Failed to create band'); return;}
+      const r = await fetch(API('/bands'), { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+      if (!r.ok) { toast('Failed to create band', false); return; }
+      ['b-name','b-genre','b-city','b-ig','b-yt','b-desc'].forEach(id => document.getElementById(id).value = '');
+      toast('Band created');
       loadAll();
     }
-    async function delBand(id){
-      if(!confirm('Delete band?')) return;
-      await fetch(API(`/bands/${id}`), {method:'DELETE', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||''}});
+
+    async function delBand(id) {
+      if (!confirm('Delete band?')) return;
+      await fetch(API(`/bands/${id}`), { method: 'DELETE', headers: authHeaders() });
+      toast('Band deleted');
       loadAll();
     }
-    function editBand(b){
+
+    function editBand(id) {
+      const b = store.bands[id];
+      if (!b) return;
       document.getElementById('b2-id').value = b.id;
       document.getElementById('b2-name').value = b.name;
-      document.getElementById('b2-genre').value = b.genre||'';
-      document.getElementById('b2-city').value = b.city||'';
-      document.getElementById('b2-ig').value = b.instagram||'';
-      document.getElementById('b2-yt').value = b.youtube||'';
-      document.getElementById('b2-desc').value = b.description||'';
+      document.getElementById('b2-genre').value = b.genre || '';
+      document.getElementById('b2-city').value = b.city || '';
+      document.getElementById('b2-ig').value = b.instagram || '';
+      document.getElementById('b2-yt').value = b.youtube || '';
+      document.getElementById('b2-desc').value = b.description || '';
+      document.getElementById('b2-name').focus();
     }
-    async function saveBand(){
+
+    async function saveBand() {
       const id = document.getElementById('b2-id').value;
+      if (!id) { toast('No band selected to edit', false); return; }
       const body = {
         name: document.getElementById('b2-name').value,
-        genre: document.getElementById('b2-genre').value,
-        city: document.getElementById('b2-city').value,
+        genre: document.getElementById('b2-genre').value || null,
+        city: document.getElementById('b2-city').value || null,
         instagram: document.getElementById('b2-ig').value || null,
         youtube: document.getElementById('b2-yt').value || null,
         description: document.getElementById('b2-desc').value || null,
       };
-      await fetch(API(`/bands/${id}`), {method:'PUT', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const r = await fetch(API(`/bands/${id}`), { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
+      if (!r.ok) { toast('Failed to save band', false); return; }
+      toast('Band saved');
       loadAll();
     }
-    async function createVenue(){
+
+    // --- Venues ---
+    async function createVenue() {
       const body = {
         name: document.getElementById('v-name').value,
-        address: document.getElementById('v-address').value,
+        address: document.getElementById('v-address').value || null,
         district: document.getElementById('v-district').value || null,
         lat: parseFloat(document.getElementById('v-lat').value),
         lon: parseFloat(document.getElementById('v-lon').value),
@@ -138,31 +180,41 @@
         website: document.getElementById('v-web').value || null,
         notes: document.getElementById('v-notes').value || null,
       };
-      const r = await fetch(API('/venues'), {method:'POST', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
-      if(!r.ok){ alert('Failed to create venue'); return;}
+      const r = await fetch(API('/venues'), { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+      if (!r.ok) { toast('Failed to create venue', false); return; }
+      ['v-name','v-address','v-district','v-lat','v-lon','v-ig','v-web','v-notes'].forEach(id => document.getElementById(id).value = '');
+      toast('Venue created');
       loadAll();
     }
-    async function delVenue(id){
-      if(!confirm('Delete venue?')) return;
-      await fetch(API(`/venues/${id}`), {method:'DELETE', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||''}});
+
+    async function delVenue(id) {
+      if (!confirm('Delete venue?')) return;
+      await fetch(API(`/venues/${id}`), { method: 'DELETE', headers: authHeaders() });
+      toast('Venue deleted');
       loadAll();
     }
-    function editVenue(v){
+
+    function editVenue(id) {
+      const v = store.venues[id];
+      if (!v) return;
       document.getElementById('v2-id').value = v.id;
       document.getElementById('v2-name').value = v.name;
-      document.getElementById('v2-address').value = v.address||'';
-      document.getElementById('v2-district').value = v.district||'';
+      document.getElementById('v2-address').value = v.address || '';
+      document.getElementById('v2-district').value = v.district || '';
       document.getElementById('v2-lat').value = v.lat;
       document.getElementById('v2-lon').value = v.lon;
-      document.getElementById('v2-ig').value = v.instagram||'';
-      document.getElementById('v2-web').value = v.website||'';
-      document.getElementById('v2-notes').value = v.notes||'';
+      document.getElementById('v2-ig').value = v.instagram || '';
+      document.getElementById('v2-web').value = v.website || '';
+      document.getElementById('v2-notes').value = v.notes || '';
+      document.getElementById('v2-name').focus();
     }
-    async function saveVenue(){
+
+    async function saveVenue() {
       const id = document.getElementById('v2-id').value;
+      if (!id) { toast('No venue selected to edit', false); return; }
       const body = {
         name: document.getElementById('v2-name').value,
-        address: document.getElementById('v2-address').value,
+        address: document.getElementById('v2-address').value || null,
         district: document.getElementById('v2-district').value || null,
         lat: parseFloat(document.getElementById('v2-lat').value),
         lon: parseFloat(document.getElementById('v2-lon').value),
@@ -170,41 +222,94 @@
         website: document.getElementById('v2-web').value || null,
         notes: document.getElementById('v2-notes').value || null,
       };
-      await fetch(API(`/venues/${id}`), {method:'PUT', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const r = await fetch(API(`/venues/${id}`), { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
+      if (!r.ok) { toast('Failed to save venue', false); return; }
+      toast('Venue saved');
       loadAll();
     }
-    async function submitEvent(){
-      const starts = document.getElementById('e-starts').value;
-      const ends = document.getElementById('e-ends').value || null;
-      const bandsSel = document.getElementById('event-bands');
-      const band_ids = Array.from(bandsSel.selectedOptions).map(o=>parseInt(o.value));
+
+    // --- Events ---
+    function toLocalDatetimeValue(isoStr) {
+      if (!isoStr) return '';
+      const d = new Date(isoStr);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function submitEvent() {
+      const band_ids = Array.from(document.getElementById('event-bands').selectedOptions).map(o => parseInt(o.value));
       const body = {
         title: document.getElementById('e-title').value,
-        starts_at: starts,
-        ends_at: ends,
+        starts_at: document.getElementById('e-starts').value,
+        ends_at: document.getElementById('e-ends').value || null,
         price: document.getElementById('e-price').value || null,
         poster_url: document.getElementById('e-poster').value || null,
         url: document.getElementById('e-url').value || null,
         venue_id: parseInt(document.getElementById('event-venue').value),
-        band_ids
+        band_ids,
       };
-      const r = await fetch(API('/events'), {method:'POST', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||'', 'Content-Type':'application/json'}, body: JSON.stringify(body)});
-      if(!r.ok){ alert('Failed to create event'); return; }
+      const r = await fetch(API('/events'), { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+      if (!r.ok) { toast('Failed to create event', false); return; }
+      ['e-title','e-price','e-url','e-poster','e-starts','e-ends'].forEach(id => document.getElementById(id).value = '');
+      toast('Event created');
       loadAll();
     }
-    async function delEvent(id){
-      if(!confirm('Delete event?')) return;
-      await fetch(API(`/events/${id}`), {method:'DELETE', headers:{'X-API-Key': localStorage.getItem('ADMIN_TOKEN')||''}});
+
+    async function delEvent(id) {
+      if (!confirm('Delete event?')) return;
+      await fetch(API(`/events/${id}`), { method: 'DELETE', headers: authHeaders() });
+      toast('Event deleted');
       loadAll();
     }
-    function editEvent(e){
-      // simple suggestion: for now, delete + recreate in UI if big edits; or extend with edit form like bands/venues
-      alert('Quick tip: use Delete then re-create for events for now, or we can add a full edit form next.');
+
+    function editEvent(id) {
+      const e = store.events[id];
+      if (!e) return;
+      document.getElementById('e2-id').value = e.id;
+      document.getElementById('e2-title').value = e.title;
+      document.getElementById('e2-starts').value = toLocalDatetimeValue(e.starts_at);
+      document.getElementById('e2-ends').value = toLocalDatetimeValue(e.ends_at);
+      document.getElementById('e2-price').value = e.price || '';
+      document.getElementById('e2-poster').value = e.poster_url || '';
+      document.getElementById('e2-url').value = e.url || '';
+      // set venue
+      const venueEl = document.getElementById('e2-venue');
+      if (e.venue?.id) venueEl.value = e.venue.id;
+      // set bands
+      const bandsEl = document.getElementById('e2-bands');
+      const selectedIds = new Set((e.bands || []).map(b => b.id));
+      Array.from(bandsEl.options).forEach(o => { o.selected = selectedIds.has(parseInt(o.value)); });
+      document.getElementById('e2-title').focus();
     }
+
+    async function saveEvent() {
+      const id = document.getElementById('e2-id').value;
+      if (!id) { toast('No event selected to edit', false); return; }
+      const band_ids = Array.from(document.getElementById('e2-bands').selectedOptions).map(o => parseInt(o.value));
+      const body = {
+        title: document.getElementById('e2-title').value,
+        starts_at: document.getElementById('e2-starts').value,
+        ends_at: document.getElementById('e2-ends').value || null,
+        price: document.getElementById('e2-price').value || null,
+        poster_url: document.getElementById('e2-poster').value || null,
+        url: document.getElementById('e2-url').value || null,
+        venue_id: parseInt(document.getElementById('e2-venue').value),
+        band_ids,
+      };
+      const r = await fetch(API(`/events/${id}`), { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
+      if (!r.ok) { toast('Failed to save event', false); return; }
+      toast('Event saved');
+      loadAll();
+    }
+
     window.addEventListener('DOMContentLoaded', loadAll);
   </script>
 </head>
 <body class="max-w-6xl mx-auto p-4 space-y-6">
+
+  <!-- Toast notification -->
+  <div id="toast" class="hidden fixed top-4 right-4 px-4 py-2 rounded shadow text-white text-sm z-50"></div>
+
   <header class="flex items-center justify-between">
     <h1 class="text-2xl font-bold">Bali Gigs — Admin</h1>
     <button class="px-3 py-1 rounded border" onclick="setToken()">Set Admin Token</button>
@@ -227,9 +332,9 @@
         </div>
       </div>
       <div class="border rounded-lg p-3">
-        <h3 class="font-medium mb-2">Edit</h3>
+        <h3 class="font-medium mb-2">Edit <span class="text-slate-400 text-sm font-normal">(click a row to load)</span></h3>
         <div class="grid gap-2">
-          <input id="b2-id" class="border p-2 rounded" placeholder="ID" readonly>
+          <input id="b2-id" class="border p-2 rounded bg-slate-50 text-slate-400" placeholder="ID" readonly>
           <input id="b2-name" class="border p-2 rounded" placeholder="Name">
           <input id="b2-genre" class="border p-2 rounded" placeholder="Genre">
           <input id="b2-city" class="border p-2 rounded" placeholder="City">
@@ -267,9 +372,9 @@
         </div>
       </div>
       <div class="border rounded-lg p-3">
-        <h3 class="font-medium mb-2">Edit</h3>
+        <h3 class="font-medium mb-2">Edit <span class="text-slate-400 text-sm font-normal">(click a row to load)</span></h3>
         <div class="grid gap-2">
-          <input id="v2-id" class="border p-2 rounded" placeholder="ID" readonly>
+          <input id="v2-id" class="border p-2 rounded bg-slate-50 text-slate-400" placeholder="ID" readonly>
           <input id="v2-name" class="border p-2 rounded" placeholder="Name">
           <input id="v2-address" class="border p-2 rounded" placeholder="Address">
           <input id="v2-district" class="border p-2 rounded" placeholder="District">
@@ -293,19 +398,36 @@
   <!-- Events -->
   <section class="space-y-3">
     <h2 class="text-xl font-semibold">Events</h2>
-    <div class="border rounded-lg p-3">
-      <h3 class="font-medium mb-2">Create</h3>
-      <div class="grid gap-2 sm:grid-cols-2">
-        <input id="e-title" class="border p-2 rounded" placeholder="Title">
-        <input id="e-price" class="border p-2 rounded" placeholder="Price">
-        <input id="e-url" class="border p-2 rounded" placeholder="URL">
-        <input id="e-poster" class="border p-2 rounded" placeholder="Poster URL">
-        <input id="e-starts" type="datetime-local" class="border p-2 rounded">
-        <input id="e-ends" type="datetime-local" class="border p-2 rounded">
-        <select id="event-venue" class="border p-2 rounded"></select>
-        <select id="event-bands" class="border p-2 rounded" multiple size="6"></select>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div class="border rounded-lg p-3">
+        <h3 class="font-medium mb-2">Create</h3>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <input id="e-title" class="border p-2 rounded" placeholder="Title">
+          <input id="e-price" class="border p-2 rounded" placeholder="Price">
+          <input id="e-url" class="border p-2 rounded" placeholder="URL">
+          <input id="e-poster" class="border p-2 rounded" placeholder="Poster URL">
+          <input id="e-starts" type="datetime-local" class="border p-2 rounded">
+          <input id="e-ends" type="datetime-local" class="border p-2 rounded">
+          <select id="event-venue" class="border p-2 rounded"></select>
+          <select id="event-bands" class="border p-2 rounded" multiple size="6"></select>
+        </div>
+        <button class="mt-2 px-3 py-2 rounded bg-slate-900 text-white" onclick="submitEvent()">Add Event</button>
       </div>
-      <button class="mt-2 px-3 py-2 rounded bg-slate-900 text-white" onclick="submitEvent()">Add Event</button>
+      <div class="border rounded-lg p-3">
+        <h3 class="font-medium mb-2">Edit <span class="text-slate-400 text-sm font-normal">(click a row to load)</span></h3>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <input id="e2-id" class="border p-2 rounded bg-slate-50 text-slate-400 sm:col-span-2" placeholder="ID" readonly>
+          <input id="e2-title" class="border p-2 rounded" placeholder="Title">
+          <input id="e2-price" class="border p-2 rounded" placeholder="Price">
+          <input id="e2-url" class="border p-2 rounded" placeholder="URL">
+          <input id="e2-poster" class="border p-2 rounded" placeholder="Poster URL">
+          <input id="e2-starts" type="datetime-local" class="border p-2 rounded">
+          <input id="e2-ends" type="datetime-local" class="border p-2 rounded">
+          <select id="e2-venue" class="border p-2 rounded"></select>
+          <select id="e2-bands" class="border p-2 rounded" multiple size="6"></select>
+        </div>
+        <button class="mt-2 px-3 py-2 rounded bg-slate-900 text-white" onclick="saveEvent()">Save Changes</button>
+      </div>
     </div>
     <table class="w-full text-sm border">
       <thead><tr class="bg-slate-100">

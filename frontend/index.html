@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bali Gigs</title>
+  <script>
+    /* Set darkMode strategy before Tailwind CDN loads */
+    window.tailwind = { config: { darkMode: 'class' } };
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link
     rel="stylesheet"
@@ -13,45 +17,93 @@
   />
   <style>
     #map { height: 60vh; }
+
+    /* Active state for tabs and view-toggle buttons —
+       CSS handles light/dark inversion so JS doesn't need to inject dark: classes */
+    .tab.is-active  { background: rgb(15 23 42); color: white; }
+    .dark .tab.is-active { background: white; color: rgb(15 23 42); }
+    .dark .tab:not(.is-active) { color: rgb(148 163 184); }
+
+    .vbtn.is-active { background: rgb(15 23 42); color: white; }
+    .dark .vbtn.is-active { background: white; color: rgb(15 23 42); }
+    .dark .vbtn:not(.is-active) { color: rgb(148 163 184); }
+
+    /* Calendar selected day */
+    .cal-sel { background: rgb(15 23 42); color: white; }
+    .dark .cal-sel { background: white; color: rgb(15 23 42); }
   </style>
 
-  <!-- Define API helper to use the Nginx reverse proxy -->
   <script>
     const API = (path) => `/api${path}`;
   </script>
 </head>
-<body class="bg-white text-slate-800">
-  <header class="p-4 border-b border-slate-200">
-    <div class="max-w-5xl mx-auto">
-      <h1 class="text-2xl font-bold">Bali Gigs</h1>
-      <p class="text-slate-500">Local bands • Venues • Events</p>
+<body class="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+
+  <header class="p-4 border-b border-slate-200 dark:border-slate-700">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold">Bali Gigs</h1>
+        <p class="text-slate-500 dark:text-slate-400">Local bands • Venues • Events</p>
+      </div>
+      <button id="theme-btn" onclick="toggleTheme()"
+        class="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+        Dark
+      </button>
     </div>
   </header>
 
   <main class="max-w-5xl mx-auto p-4 space-y-4">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <nav class="inline-flex rounded-xl overflow-hidden border border-slate-200">
-        <button data-page="events" class="tab px-4 py-2 bg-slate-900 text-white">Events</button>
-        <button data-page="bands" class="tab px-4 py-2">Bands</button>
+      <nav class="inline-flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
+        <button data-page="events" class="tab is-active px-4 py-2">Events</button>
+        <button data-page="bands"  class="tab px-4 py-2">Bands</button>
         <button data-page="venues" class="tab px-4 py-2">Venues (Map)</button>
       </nav>
       <div class="flex gap-2 items-center">
-        <input id="search" type="search" placeholder="Search…" class="w-64 px-3 py-2 rounded-lg border border-slate-300" />
-        <label class="flex items-center gap-2 text-sm text-slate-600">
+        <input id="search" type="search" placeholder="Search…"
+          class="w-64 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder-slate-400" />
+        <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
           <input id="upcomingOnly" type="checkbox" class="rounded" checked>
           Upcoming only
         </label>
       </div>
     </div>
 
-    <section id="page-events" class="page space-y-3"></section>
+    <section id="page-events" class="page">
+      <div class="flex items-center justify-between mb-3">
+        <span id="events-count" class="text-sm text-slate-500 dark:text-slate-400"></span>
+        <div class="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden text-sm">
+          <button id="view-list-btn" onclick="setEventView('list')" class="vbtn is-active px-3 py-1.5">List</button>
+          <button id="view-cal-btn"  onclick="setEventView('cal')"  class="vbtn px-3 py-1.5">Calendar</button>
+        </div>
+      </div>
+
+      <!-- List view -->
+      <div id="events-list" class="space-y-3"></div>
+
+      <!-- Calendar view -->
+      <div id="events-cal" class="hidden">
+        <div class="flex items-center justify-between mb-3">
+          <button onclick="calShift(-1)"
+            class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">&larr;</button>
+          <span id="cal-title" class="font-semibold dark:text-slate-100"></span>
+          <button onclick="calShift(1)"
+            class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">&rarr;</button>
+        </div>
+        <div class="grid grid-cols-7 text-center text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">
+          <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+        </div>
+        <div id="cal-grid" class="grid grid-cols-7 gap-1 mb-4"></div>
+        <div id="cal-day-events" class="space-y-3"></div>
+      </div>
+    </section>
 
     <section id="page-bands" class="page hidden">
       <div id="bands" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
     </section>
 
     <section id="page-venues" class="page hidden space-y-3">
-      <div id="map" class="rounded-xl border border-slate-200 shadow-sm"></div>
+      <div id="map" class="rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"></div>
       <div id="venues" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
     </section>
   </main>
@@ -60,9 +112,32 @@
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
           crossorigin=""></script>
   <script>
+    // --- Theme ---
+    function applyTheme(dark) {
+      document.documentElement.classList.toggle('dark', dark);
+      document.getElementById('theme-btn').textContent = dark ? 'Light' : 'Dark';
+    }
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.contains('dark');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyTheme(!isDark);
+    }
+    (function initTheme() {
+      const saved = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(saved ? saved === 'dark' : prefersDark);
+    })();
+
     // --- State ---
     let allBands = [], allVenues = [], allEvents = [];
     let map, markersLayer, mapReady = false;
+
+    // Calendar state
+    const _now = new Date();
+    let calYear = _now.getFullYear(), calMonth = _now.getMonth();
+    let calSelectedDay = null;
+    let calEventView = 'list';
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
     const $ = (sel) => document.querySelector(sel);
     const fmtDT = (s) => new Date(s).toLocaleString();
@@ -72,27 +147,45 @@
     const tabs = document.querySelectorAll('.tab');
     const pages = {
       events: $('#page-events'),
-      bands: $('#page-bands'),
+      bands:  $('#page-bands'),
       venues: $('#page-venues'),
     };
     tabs.forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
 
     function setPage(name) {
-      tabs.forEach(b => {
-        b.classList.remove('bg-slate-900', 'text-white');
-        if (b.dataset.page === name) b.classList.add('bg-slate-900', 'text-white');
-      });
+      tabs.forEach(b => b.classList.toggle('is-active', b.dataset.page === name));
       Object.entries(pages).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
       if (name === 'venues' && !mapReady) initMap();
       render();
     }
 
-    // --- Renderers ---
-    function render() {
+    // --- Event view toggle ---
+    function setEventView(v) {
+      calEventView = v;
+      $('#view-list-btn').classList.toggle('is-active', v === 'list');
+      $('#view-cal-btn').classList.toggle('is-active',  v === 'cal');
+      $('#events-list').classList.toggle('hidden', v !== 'list');
+      $('#events-cal').classList.toggle('hidden',  v !== 'cal');
+      render();
+    }
+
+    window.calShift = (dir) => {
+      calMonth += dir;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      if (calMonth < 0)  { calMonth = 11; calYear--; }
+      calSelectedDay = null;
+      renderCalendar();
+    };
+
+    window.selectCalDay = (dateStr, hasEvents) => {
+      if (!hasEvents) return;
+      calSelectedDay = calSelectedDay === dateStr ? null : dateStr;
+      renderCalendar();
+    };
+
+    function filteredEvents() {
       const q = ($('#search').value || '').trim().toLowerCase();
       const upcomingOnly = $('#upcomingOnly').checked;
-
-      // Events
       let ev = [...allEvents];
       if (upcomingOnly) {
         const now = Date.now();
@@ -105,8 +198,77 @@
           (e.bands || []).some(b => includes(b.name, q))
         );
       }
-      ev.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
-      $('#page-events').innerHTML = ev.map(eventCard).join('') || emptyState('No events match.');
+      return ev;
+    }
+
+    function renderCalendar() {
+      const ev = filteredEvents();
+
+      const byDay = {};
+      ev.forEach(e => {
+        const d = e.starts_at.substring(0, 10);
+        (byDay[d] = byDay[d] || []).push(e);
+      });
+
+      $('#cal-title').textContent = `${MONTHS[calMonth]} ${calYear}`;
+
+      const firstDow = new Date(calYear, calMonth, 1).getDay();
+      const offset = (firstDow + 6) % 7; // Mon=0
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+      const todayStr = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+
+      let html = '';
+      for (let i = 0; i < offset; i++) html += '<div></div>';
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const dayEv = byDay[ds] || [];
+        const hasEv = dayEv.length > 0;
+        const isSel = calSelectedDay === ds;
+        const isToday = ds === todayStr;
+
+        let dots = '';
+        if (hasEv) {
+          dots = dayEv.slice(0, 3).map(() =>
+            `<span class="inline-block w-1.5 h-1.5 rounded-full ${isSel ? 'bg-orange-300' : 'bg-orange-500'}"></span>`
+          ).join('');
+          if (dayEv.length > 3) dots += `<span class="text-xs ${isSel ? 'text-orange-200' : 'text-slate-400 dark:text-slate-500'}">+${dayEv.length - 3}</span>`;
+        }
+
+        html += `
+          <button onclick="selectCalDay('${ds}', ${hasEv})"
+            class="flex flex-col items-center pt-1 pb-1 rounded-lg text-sm min-h-[3rem]
+              ${isSel   ? 'cal-sel' : ''}
+              ${isToday && !isSel ? 'ring-2 ring-inset ring-orange-400' : ''}
+              ${hasEv   && !isSel ? 'hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer' : ''}
+              ${!hasEv  ? 'text-slate-300 dark:text-slate-600 cursor-default' : ''}">
+            <span class="leading-tight">${d}</span>
+            <div class="flex gap-0.5 flex-wrap justify-center mt-0.5">${dots}</div>
+          </button>`;
+      }
+      $('#cal-grid').innerHTML = html;
+
+      if (calSelectedDay && byDay[calSelectedDay]) {
+        const label = new Date(calSelectedDay + 'T00:00:00').toLocaleDateString('en-US', {
+          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        });
+        $('#cal-day-events').innerHTML =
+          `<h3 class="font-semibold text-slate-700 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 pt-3">${label}</h3>` +
+          byDay[calSelectedDay].sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)).map(eventCard).join('');
+      } else {
+        $('#cal-day-events').innerHTML = '';
+      }
+    }
+
+    // --- Renderers ---
+    function render() {
+      const q = ($('#search').value || '').trim().toLowerCase();
+
+      // Events
+      const ev = filteredEvents().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      $('#events-count').textContent = ev.length ? `${ev.length} event${ev.length === 1 ? '' : 's'}` : '';
+      $('#events-list').innerHTML = ev.map(eventCard).join('') || emptyState('No events match.');
+      if (calEventView === 'cal') renderCalendar();
 
       // Bands
       let bands = [...allBands];
@@ -121,48 +283,45 @@
     }
 
     function emptyState(text) {
-      return `<div class="p-6 text-center text-slate-500 border border-dashed rounded-xl">${text}</div>`;
+      return `<div class="p-6 text-center text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">${text}</div>`;
     }
 
     function eventCard(e) {
       const bands = e.bands?.map(b => b.name).join(', ');
       return `
-        <article class="border rounded-xl p-4 shadow-sm border-slate-200">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h3 class="font-semibold text-lg">${e.title}</h3>
-              <div class="text-sm text-slate-600">${fmtDT(e.starts_at)} • <button class="underline" onclick="focusVenue(${e.venue.id})">${e.venue.name}</button></div>
-              ${bands ? `<div class="text-sm mt-1"><span class="font-medium">Bands:</span> ${bands}</div>` : ''}
-              ${e.price ? `<div class="text-sm mt-1">${e.price}</div>` : ''}
-              ${e.url ? `<div class="text-sm mt-1"><a class="text-blue-600 underline" href="${e.url}" target="_blank" rel="noopener">More info</a></div>` : ''}
-            </div>
-          </div>
+        <article class="border rounded-xl p-4 shadow-sm border-slate-200 dark:border-slate-700 dark:bg-slate-800">
+          <h3 class="font-semibold text-lg">${e.title}</h3>
+          <div class="text-sm text-slate-600 dark:text-slate-400">${fmtDT(e.starts_at)} • <button class="underline" onclick="focusVenue(${e.venue.id})">${e.venue.name}</button></div>
+          ${bands ? `<div class="text-sm mt-1"><span class="font-medium">Bands:</span> ${bands}</div>` : ''}
+          ${e.price ? `<div class="text-sm mt-1 text-slate-600 dark:text-slate-400">${e.price}</div>` : ''}
+          ${e.url ? `<div class="text-sm mt-1"><a class="text-blue-600 dark:text-blue-400 underline" href="${e.url}" target="_blank" rel="noopener">More info</a></div>` : ''}
         </article>`;
     }
 
     function bandCard(b) {
       return `
-        <article class="border rounded-xl p-4 shadow-sm border-slate-200">
+        <article class="border rounded-xl p-4 shadow-sm border-slate-200 dark:border-slate-700 dark:bg-slate-800">
           <h3 class="font-semibold">${b.name}</h3>
-          <div class="text-sm text-slate-600">${[b.genre, b.city].filter(Boolean).join(' • ')}</div>
-          ${b.instagram ? `<div class="text-sm mt-1">IG: <a class="underline" href="https://instagram.com/${b.instagram}" target="_blank" rel="noopener">@${b.instagram}</a></div>` : ''}
-          ${b.youtube ? `<div class="text-sm">YouTube: <a class="underline" href="${b.youtube}" target="_blank" rel="noopener">link</a></div>` : ''}
-          ${b.description ? `<p class="text-sm mt-2">${b.description}</p>` : ''}
+          <div class="text-sm text-slate-600 dark:text-slate-400">${[b.genre, b.city].filter(Boolean).join(' • ')}</div>
+          ${b.instagram ? `<div class="text-sm mt-1">IG: <a class="underline text-blue-600 dark:text-blue-400" href="https://instagram.com/${b.instagram}" target="_blank" rel="noopener">@${b.instagram}</a></div>` : ''}
+          ${b.youtube   ? `<div class="text-sm">YouTube: <a class="underline text-blue-600 dark:text-blue-400" href="${b.youtube}" target="_blank" rel="noopener">link</a></div>` : ''}
+          ${b.description ? `<p class="text-sm mt-2 text-slate-600 dark:text-slate-400">${b.description}</p>` : ''}
         </article>`;
     }
 
     function venueCard(v) {
       return `
-        <article class="border rounded-xl p-4 shadow-sm border-slate-200">
+        <article class="border rounded-xl p-4 shadow-sm border-slate-200 dark:border-slate-700 dark:bg-slate-800">
           <div class="flex items-start justify-between gap-3">
             <div>
               <h3 class="font-semibold">${v.name}</h3>
-              ${v.address ? `<div class="text-sm text-slate-600">${v.address}</div>` : ''}
-              ${v.district ? `<div class="text-sm text-slate-600">${v.district}</div>` : ''}
-              ${v.instagram ? `<div class="text-sm">IG: <a class="underline" href="https://instagram.com/${v.instagram}" target="_blank" rel="noopener">@${v.instagram}</a></div>` : ''}
-              ${v.website ? `<div class="text-sm"><a class="underline" href="${v.website}" target="_blank" rel="noopener">Website</a></div>` : ''}
+              ${v.address  ? `<div class="text-sm text-slate-600 dark:text-slate-400">${v.address}</div>` : ''}
+              ${v.district ? `<div class="text-sm text-slate-600 dark:text-slate-400">${v.district}</div>` : ''}
+              ${v.instagram ? `<div class="text-sm">IG: <a class="underline text-blue-600 dark:text-blue-400" href="https://instagram.com/${v.instagram}" target="_blank" rel="noopener">@${v.instagram}</a></div>` : ''}
+              ${v.website  ? `<div class="text-sm"><a class="underline text-blue-600 dark:text-blue-400" href="${v.website}" target="_blank" rel="noopener">Website</a></div>` : ''}
             </div>
-            <button class="px-3 py-1 text-sm rounded-lg border" onclick="focusLatLon(${v.lat}, ${v.lon})">View on map</button>
+            <button class="px-3 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 shrink-0"
+              onclick="focusLatLon(${v.lat}, ${v.lon})">View on map</button>
           </div>
         </article>`;
     }
@@ -203,9 +362,8 @@
     async function fetchJSON(path) {
       const r = await fetch(API(path));
       if (!r.ok) throw new Error(`Failed ${path}`);
-      return await r.json();
+      return r.json();
     }
-
 
     async function boot() {
       [allBands, allVenues, allEvents] = await Promise.all([
@@ -222,7 +380,7 @@
     setPage('events');
     boot().catch(err => {
       console.error(err);
-      pages.events.innerHTML = `<div class="p-6 text-center text-red-600 border border-red-200 rounded-xl">Failed to load API data. Check backend at /api/.</div>`;
+      pages.events.innerHTML = `<div class="p-6 text-center text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl">Failed to load API data. Check backend at /api/.</div>`;
     });
   </script>
 </body>

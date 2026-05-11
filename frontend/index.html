@@ -4,11 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bali Gigs</title>
-  <script>
-    /* Set darkMode strategy before Tailwind CDN loads */
-    window.tailwind = { config: { darkMode: 'class' } };
-  </script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"

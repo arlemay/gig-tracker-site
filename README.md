@@ -168,9 +168,45 @@ The token is stored in `sessionStorage` and cleared when you close the tab.
 
 ---
 
-## Importing data from CSV
+## Importing data
 
-### Events
+### Events from Instagram-scraped JSON
+
+```bash
+backend/.venv/bin/python -m backend.import_events_json /path/to/events.json --dry-run
+backend/.venv/bin/python -m backend.import_events_json /path/to/events.json
+```
+
+Expected JSON shape:
+
+```json
+{
+  "venue": "Venue Name",
+  "events": [
+    {
+      "code": "<IG post code>",
+      "date": "YYYY-MM-DD",
+      "title": "Event Title",
+      "type": "free|ticketed",
+      "start_time": "HH:MM",
+      "entry": "Price description",
+      "headliner": "@handle",
+      "supports": ["@handle1", "@handle2"],
+      "bands": ["@handle3", "Plain Name"]
+    }
+  ]
+}
+```
+
+- Venue matched by name (case-insensitive); created as a stub if missing — update coords in admin UI
+- Band `@handles` → stored with the `instagram` field set; plain names stored as-is
+- `url` is set to `https://www.instagram.com/p/<code>/`
+- `entry` is stored as the event price string
+- Re-running is safe (skips events with the same title + date)
+
+Pre-built import files live in `backend/imports/`.
+
+### Events from CSV
 
 ```bash
 backend/.venv/bin/python -m backend.import_events_csv /path/to/events.csv --dry-run
@@ -211,20 +247,22 @@ The map uses [Thunderforest](https://www.thunderforest.com/) tiles. The API key 
 ```
 bali-gigs/
 ├── backend/
-│   ├── main.py               # FastAPI routes
-│   ├── models.py             # SQLAlchemy models (Band, Venue, Event)
-│   ├── schemas.py            # Pydantic schemas
-│   ├── database.py           # DB engine + session setup
-│   ├── auth.py               # Admin token auth
-│   ├── import_events_csv.py  # CLI: bulk import events
-│   ├── import_bands_csv.py   # CLI: bulk import bands
-│   ├── import_venues_csv.py  # CLI: bulk import venues
+│   ├── main.py                  # FastAPI routes
+│   ├── models.py                # SQLAlchemy models (Band, Venue, Event)
+│   ├── schemas.py               # Pydantic schemas
+│   ├── database.py              # DB engine + session setup
+│   ├── auth.py                  # Admin token auth
+│   ├── import_events_json.py    # CLI: bulk import events from IG-scraped JSON
+│   ├── import_events_csv.py     # CLI: bulk import events from CSV
+│   ├── import_bands_csv.py      # CLI: bulk import bands
+│   ├── import_venues_csv.py     # CLI: bulk import venues
+│   ├── imports/                 # Pre-built import JSON files
 │   ├── requirements.txt
 │   └── .venv/
 ├── frontend/
-│   ├── index.html            # Public listing (events, bands, map)
-│   └── admin.html            # Admin CRUD UI
-└── bali_gigs.db              # SQLite database (not in git)
+│   ├── index.html               # Public listing (events, bands, map)
+│   └── admin.html               # Admin CRUD UI
+└── bali_gigs.db                 # SQLite database (not in git)
 ```
 
 ---

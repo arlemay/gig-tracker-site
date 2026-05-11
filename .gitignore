@@ -1,0 +1,14 @@
+# Database
+bali_gigs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Backups
+*.bak
+
+# Environment
+.env
